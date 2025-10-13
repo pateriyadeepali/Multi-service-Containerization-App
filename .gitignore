@@ -1,0 +1,27 @@
+# Node modules
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Angular build output
+dist/
+out-tsc/
+
+# Docker
+*.log
+*.env
+docker-compose.override.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Visual Studio / .NET
+bin/
+obj/
+.vscode/
+*.user
+*.suo
+
+# MongoDB data folder
+mongo-data/
