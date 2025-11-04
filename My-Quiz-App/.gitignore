@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+
+# Flutter
+build/
+.pub/
+*.lock
+
+# Docker
+*.log
+*.pid
+
+# Misc
+.DS_Store
+.idea/
+.vscode/
