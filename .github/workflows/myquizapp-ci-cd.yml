@@ -1,3 +1,41 @@
+name: My-Quiz-App CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'My-Quiz-App/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & push backend image
+        working-directory: My-Quiz-App/quiz-backend
+        run: |
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-backend:latest .
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-backend:latest
+
+      - name: Build & push frontend image
+        working-directory: My-Quiz-App/quiz_frontend
+        run: |
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-frontend:latest .
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-frontend:latest
+
   deploy-to-azure-vm:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -10,56 +48,58 @@
         with:
           ssh-private-key: ${{ secrets.AZURE_VM_SSH_KEY }}
 
-      - name: Deploy to Azure VM
+      - name: Upload and execute deploy script
         env:
           VM_HOST: ${{ secrets.AZURE_VM_HOST }}
           VM_USER: ${{ secrets.AZURE_VM_USERNAME }}
           DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
-          echo "🔗 Connecting to $VM_HOST as $VM_USER ..."
-          ssh -o StrictHostKeyChecking=no $VM_USER@$VM_HOST bash -s <<EOF
-set -e
+          echo "🔧 Creating deployment script..."
+          cat > deploy.sh <<'SCRIPT'
+          #!/bin/bash
+          set -e
 
-echo "✅ Logged in as \$(whoami)"
-echo "👤 VM user variable received: $VM_USER"
-echo "🐳 Docker user: $DOCKER_USER"
+          echo "Logged in as $(whoami)"
 
-# Ensure Docker is installed
-if ! command -v docker &> /dev/null; then
-  echo "Installing Docker..."
-  sudo apt-get update -y
-  sudo apt-get install -y docker.io docker-compose-plugin
-  sudo systemctl enable docker
-  sudo systemctl start docker
-fi
+          # Ensure Docker is installed
+          if ! command -v docker &>/dev/null; then
+            echo "Installing Docker..."
+            sudo apt-get update -y
+            sudo apt-get install -y docker.io docker-compose-plugin
+            sudo systemctl enable docker
+            sudo systemctl start docker
+          fi
 
-WORK_DIR="/home/$VM_USER/myquizapp"
-echo "📂 Using working directory: \$WORK_DIR"
-sudo mkdir -p \$WORK_DIR
-sudo chown -R \$VM_USER:\$VM_USER \$WORK_DIR
-cd \$WORK_DIR
+          WORK_DIR="/home/$USER/myquizapp"
+          echo "Using working directory: $WORK_DIR"
+          sudo mkdir -p "$WORK_DIR"
+          sudo chown -R "$USER:$USER" "$WORK_DIR"
+          cd "$WORK_DIR"
 
-# Create docker-compose.yml fresh
-cat > docker-compose.yml <<'EOC'
-version: "3.9"
-services:
-  backend:
-    image: __DOCKER_USER__/myquizapp-backend:latest
-    ports:
-      - "8010:8000"
-  frontend:
-    image: __DOCKER_USER__/myquizapp-frontend:latest
-    ports:
-      - "8081:80"
-EOC
+          echo "Writing docker-compose.yml"
+          cat > docker-compose.yml <<EOC
+          version: "3.9"
+          services:
+            backend:
+              image: DOCKER_USER_PLACEHOLDER/myquizapp-backend:latest
+              ports:
+                - "8010:8000"
+            frontend:
+              image: DOCKER_USER_PLACEHOLDER/myquizapp-frontend:latest
+              ports:
+                - "8081:80"
+          EOC
 
-# Replace placeholder with actual docker username
-sed -i "s|__DOCKER_USER__|$DOCKER_USER|g" docker-compose.yml
+          sed -i "s|DOCKER_USER_PLACEHOLDER|$DOCKER_USER|g" docker-compose.yml
 
-echo "🛠️ Pulling and starting containers..."
-docker compose pull
-docker compose up -d --remove-orphans
+          echo "Pulling and starting containers..."
+          docker compose pull
+          docker compose up -d --remove-orphans
+          docker ps
+          SCRIPT
 
-echo "Deployment complete. Running containers:"
-docker ps
-EOF
+          echo " Copying script to VM..."
+          scp -o StrictHostKeyChecking=no deploy.sh $VM_USER@$VM_HOST:/home/$VM_USER/deploy.sh
+
+          echo "Running deployment script on VM..."
+          ssh -o StrictHostKeyChecking=no $VM_USER@$VM_HOST "export DOCKER_USER=$DOCKER_USER && bash ~/deploy.sh"
