@@ -21,7 +21,7 @@ services:
       - quiz-net
 
   backend:
-    build: ./quiz-backend
+    image: deepali2712/myquizapp-backend:latest   
     container_name: quiz-api
     restart: always
     depends_on:
@@ -35,13 +35,13 @@ services:
       - quiz-net
 
   frontend:
-    build: ./quiz_frontend
+    image: deepali2712/myquizapp-frontend:latest
     container_name: quiz-ui
     restart: always
     depends_on:
       - backend
     ports:
-      - "8081:80"
+      - "80:80"
     networks:
       - quiz-net
 
@@ -51,4 +51,3 @@ volumes:
 networks:
   quiz-net:
     driver: bridge
-
