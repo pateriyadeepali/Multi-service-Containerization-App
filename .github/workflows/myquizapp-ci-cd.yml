@@ -39,9 +39,12 @@ jobs:
   deploy-to-azure-vm:
     needs: build-and-push
     runs-on: self-hosted
+    env:
+      VM_HOST: ${{ secrets.AZURE_VM_HOST }}
+      VM_USER: ${{ secrets.AZURE_VM_USERNAME }}
     steps:
       - name: Install SSH client
-        run: sudo apt-get update && sudo apt-get install -y openssh-client
+        run: sudo apt-get update && sudo apt-get install -y openssh-client git
 
       - name: Start ssh-agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -49,28 +52,28 @@ jobs:
           ssh-private-key: ${{ secrets.AZURE_VM_SSH_KEY }}
 
       - name: Deploy to Azure VM
-        env:
-          VM_HOST: ${{ secrets.AZURE_VM_HOST }}
-          VM_USER: ${{ secrets.AZURE_VM_USERNAME }}
         run: |
-          ssh -o StrictHostKeyChecking=no $VM_USER@$VM_HOST << 'EOF'
-            mkdir -p ~/myquizapp
-            cd ~/myquizapp
+          ssh -o StrictHostKeyChecking=no $VM_USER@$VM_HOST << EOF
+            set -e
 
-            cat <<EOC > docker-compose.yml
-            version: "3"
-            services:
-              backend:
-                image: ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-backend:latest
-                ports:
-                  - "8010:8000"
-              frontend:
-                image: ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-frontend:latest
-                ports:
-                  - "8081:80"
-            EOC
+            # Clone or update your repo
+            if [ ! -d "/home/$VM_USER/Multi-service-Containerization-App" ]; then
+              git clone https://github.com/pateriyadeepali/Multi-service-Containerization-App.git
+            else
+              cd /home/$VM_USER/Multi-service-Containerization-App
+              git pull origin main
+            fi
 
-            docker compose pull
-            docker compose up -d --remove-orphans
-            docker ps
+            # Navigate to your app folder
+            cd /home/$VM_USER/Multi-service-Containerization-App/My-Quiz-App
+
+            # Ensure Docker Compose is available
+            if ! docker compose version >/dev/null 2>&1; then
+              sudo apt-get update && sudo apt-get install docker-compose-plugin -y
+            fi
+
+            # Pull and restart containers
+            sudo docker compose pull
+            sudo docker compose up -d --remove-orphans
+            sudo docker ps
           EOF
