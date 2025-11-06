@@ -50,23 +50,23 @@ jobs:
 
       - name: 🚀 Deploy to Azure VM
         run: |
-          ssh -o StrictHostKeyChecking=no $VM_USER@$VM_HOST << 'EOF'
+          ssh -o StrictHostKeyChecking=no $VM_USER@$VM_HOST << EOF
             set -e
             echo "=============================="
             echo "📦 Starting Deployment Process"
             echo "=============================="
 
-            # ✅ Ensure a writable safe directory
+            # ✅ Ensure writable project directory
             mkdir -p /home/$VM_USER/projects
             sudo chown -R $VM_USER:$VM_USER /home/$VM_USER/projects
             cd /home/$VM_USER/projects
 
-            # ✅ Clone or update the repo
+            # ✅ Clone or update repo
             if [ ! -d "Multi-service-Containerization-App" ]; then
               echo "🆕 Cloning repository..."
               git clone https://github.com/pateriyadeepali/Multi-service-Containerization-App.git
             else
-              echo "🔄 Updating existing repository..."
+              echo "🔄 Updating repository..."
               cd Multi-service-Containerization-App
               git reset --hard
               git pull origin main
@@ -77,13 +77,13 @@ jobs:
             echo "🧹 Cleaning old Docker resources..."
             sudo docker system prune -af || true
 
-            echo "⬇️ Pulling latest images from Docker Hub..."
+            echo "⬇️ Pulling latest images..."
             sudo docker compose pull
 
-            echo "🚀 Recreating containers with latest versions..."
+            echo "🚀 Recreating containers..."
             sudo docker compose up -d --remove-orphans
 
-            echo "✅ Active containers after deployment:"
+            echo "✅ Containers running:"
             sudo docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
 
             echo "📝 Logging deployment timestamp..."
