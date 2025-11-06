@@ -1,70 +1,65 @@
-name: My-Quiz-App CI/CD (Self-Hosted)
+build-and-push:
+  runs-on: ubuntu-latest   # GitHub's own high-RAM runner handles builds
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'My-Quiz-App/**'
-  workflow_dispatch:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
 
-jobs:
-  build-and-deploy:
-    runs-on: self-hosted
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    steps:
-      - name: checkout Repository
-        uses: actions/checkout@v4
+    - name: Build & push backend image
+      working-directory: My-Quiz-App/quiz-backend
+      run: |
+        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-backend:latest .
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-backend:latest
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    - name: Build & push frontend image
+      working-directory: My-Quiz-App/quiz_frontend
+      run: |
+        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-frontend:latest .
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-frontend:latest
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+deploy-to-azure-vm:
+  needs: build-and-push
+  runs-on: self-hosted   # now only deploys on your VM
+  steps:
+    - name: Install SSH client
+      run: sudo apt-get update && sudo apt-get install -y openssh-client
 
-      - name: Build & Push Backend Image
-        working-directory: My-Quiz-App/quiz-backend
-        run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-backend:latest .
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-backend:latest
+    - name: Start ssh-agent
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.AZURE_VM_SSH_KEY }}
 
-      - name: Build & Push Frontend Image
-        working-directory: My-Quiz-App/quiz_frontend
-        run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-frontend:latest .
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-frontend:latest
+    - name: Deploy to Azure VM
+      env:
+        VM_HOST: ${{ secrets.AZURE_VM_HOST }}
+        VM_USER: ${{ secrets.AZURE_VM_USERNAME }}
+      run: |
+        ssh -o StrictHostKeyChecking=no $VM_USER@$VM_HOST << 'EOF'
+          mkdir -p ~/myquizapp
+          cd ~/myquizapp
 
-      - name: Deploy Containers using Docker Compose
-        working-directory: /home/azureuser/myquizapp
-        run: |
-          echo "Running deployment on self-hosted runner (Azure VM)"
-          
-          # If directory does not exist, create it
-          sudo mkdir -p /home/azureuser/myquizapp
-          cd /home/azureuser/myquizapp
+          cat <<EOC > docker-compose.yml
+          version: "3"
+          services:
+            backend:
+              image: ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-backend:latest
+              ports:
+                - "8010:8000"
+            frontend:
+              image: ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-frontend:latest
+              ports:
+                - "8081:80"
+          EOC
 
-          # Write docker-compose.yml if not present
-          if [ ! -f docker-compose.yml ]; then
-            cat <<EOC | sudo tee docker-compose.yml
-            version: "3.9"
-            services:
-              backend:
-                image: ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-backend:latest
-                ports:
-                  - "8010:8000"
-              frontend:
-                image: ${{ secrets.DOCKERHUB_USERNAME }}/myquizapp-frontend:latest
-                ports:
-                  - "8081:80"
-            EOC
-          fi
-
-          echo "Pulling latest images and starting containers..."
-          sudo docker compose pull
-          sudo docker compose up -d --remove-orphans
-          sudo docker ps
-
-          echo "Deployment completed successfully!"
+          docker compose pull
+          docker compose up -d --remove-orphans
+          docker ps
+        EOF
