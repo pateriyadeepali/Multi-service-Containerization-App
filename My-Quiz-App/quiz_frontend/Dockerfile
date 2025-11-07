@@ -5,33 +5,25 @@ RUN apt-get update && apt-get install -y \
     curl git unzip xz-utils zip libglu1-mesa && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Flutter SDK
 WORKDIR /flutter
 RUN git clone https://github.com/flutter/flutter.git -b stable
 ENV PATH="/flutter/flutter/bin:/flutter/flutter/bin/cache/dart-sdk/bin:${PATH}"
 
-# Verify installation
+# Pre-download Flutter dependencies
 RUN flutter doctor -v
 
-# Set working directory for the app
 WORKDIR /app
+COPY pubspec.* ./
+RUN flutter pub get
 
-# Copy all source files (force rebuild each time)
+# Now copy the full app (so code change triggers rebuild)
 COPY . .
 
-# Force Flutter to clean & rebuild every time
-RUN flutter clean
-RUN flutter pub get
-RUN flutter build web --release --no-tree-shake-icons --verbose
+# Clean and rebuild Flutter web app every time
+RUN flutter clean && flutter pub get && flutter build web --release --no-tree-shake-icons
 
-# Stage 2: Nginx Server
+# Stage 2: Serve using Nginx
 FROM nginx:alpine
-
-# Clear Nginx default HTML and copy new Flutter build
-RUN rm -rf /usr/share/nginx/html/*
 COPY --from=build /app/build/web /usr/share/nginx/html
-
-# Expose port 80 for serving
 EXPOSE 80
-
 CMD ["nginx", "-g", "daemon off;"]
