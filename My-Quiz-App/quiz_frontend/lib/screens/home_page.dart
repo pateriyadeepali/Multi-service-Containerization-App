@@ -179,7 +179,7 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: Colors.purpleAccent,
         onPressed: () async {
           final added = await Navigator.push(
             context,
