@@ -27,20 +27,20 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Build Backend
       - name: Build and push backend image
         working-directory: react-node-couchdb/backend
         run: |
           echo "Building backend image with no cache..."
           docker build --no-cache -t ${{ secrets.DOCKERHUB_USERNAME }}/react-node-couchdb-backend:latest .
+          echo "Pushing backend image to Docker Hub..."
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/react-node-couchdb-backend:latest
 
-      # Build Frontend
       - name: Build and push frontend image
         working-directory: react-node-couchdb/frontend
         run: |
           echo "Building frontend image with no cache..."
           docker build --no-cache -t ${{ secrets.DOCKERHUB_USERNAME }}/react-node-couchdb-frontend:latest .
+          echo "Pushing frontend image to Docker Hub..."
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/react-node-couchdb-frontend:latest
 
   deploy-to-azure-vm2:
@@ -59,11 +59,18 @@ jobs:
 
       - name: Deploy to Azure VM2
         run: |
-          ssh -o StrictHostKeyChecking=no $VM_USER@$VM_HOST << 'EOF'
+          echo "Connecting to Azure VM2 ($VM_USER@$VM_HOST)..."
+          ssh -o StrictHostKeyChecking=no $VM_USER@$VM_HOST << EOF
             set -e
-            echo "================================="
-            echo "Starting Deployment to VM2..."
-            echo "================================="
+
+            if [ -z "$VM_USER" ]; then
+              echo "ERROR: VM_USER is empty. Check AZURE_VM2_USERNAME secret."
+              exit 1
+            fi
+
+            echo "Logged in as: $(whoami)"
+            echo "Current working directory: $(pwd)"
+            echo "Starting deployment process..."
 
             PROJECT_DIR="/home/$VM_USER/projects/Multi-service-Containerization-App/react-node-couchdb"
             REPO_DIR="/home/$VM_USER/projects/Multi-service-Containerization-App"
@@ -76,7 +83,7 @@ jobs:
               echo "Cloning repository..."
               git clone https://github.com/pateriyadeepali/Multi-service-Containerization-App.git
             else
-              echo "Updating repository..."
+              echo "Updating existing repository..."
               cd Multi-service-Containerization-App
               git fetch origin main
               git reset --hard origin/main
@@ -90,11 +97,11 @@ jobs:
 
             echo "Creating persistent volume if not exists..."
             VOLUME_NAME="react-node-couchdb_couchdb-data"
-            if ! sudo docker volume inspect $VOLUME_NAME > /dev/null 2>&1; then
-              sudo docker volume create $VOLUME_NAME
-              echo "Created new volume: $VOLUME_NAME"
+            if ! sudo docker volume inspect \$VOLUME_NAME > /dev/null 2>&1; then
+              sudo docker volume create \$VOLUME_NAME
+              echo "Created new Docker volume: \$VOLUME_NAME"
             else
-              echo "Volume already exists: $VOLUME_NAME"
+              echo "Volume already exists: \$VOLUME_NAME"
             fi
 
             echo "Pulling latest Docker images..."
@@ -109,9 +116,7 @@ jobs:
 
             echo "Logging deployment..."
             mkdir -p /home/$VM_USER/deploy-logs
-            echo "Deployment completed at: $(date)" >> /home/$VM_USER/deploy-logs/deploy-$(date +'%Y%m%d-%H%M').log
+            echo "Deployment completed at: \$(date)" >> /home/$VM_USER/deploy-logs/deploy-\$(date +'%Y%m%d-%H%M').log
 
-            echo "================================="
-            echo "Deployment Successful on VM2!"
-            echo "================================="
+            echo "Deployment successful on VM2."
           EOF
