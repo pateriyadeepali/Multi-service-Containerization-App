@@ -14,8 +14,8 @@ const allowedOrigins = [
   "http://backend:5000",            // internal Docker call
   "http://frontend",                // Docker service name
   "http://frontend:80",             // Nginx inside Docker
-  "http://172.188.96.249",     // external Azure IP (we’ll replace below)
-  "http://172.188.96.249:80"   // explicit port if needed   // LAN access
+  "http://4.194.219.226",     // external Azure IP (we’ll replace below)
+  "http://4.194.219.226:80"   // explicit port if needed   // LAN access
 ];
 
 app.use(cors({
