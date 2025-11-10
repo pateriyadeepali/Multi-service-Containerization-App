@@ -89,8 +89,21 @@ jobs:
               git reset --hard origin/main
             fi
 
-            echo "Navigating to react-node-couchdb project..."
-            cd $PROJECT_DIR
+            echo "Navigating to project folder..."
+            if [ -d "$REPO_DIR/react-node-couchdb" ]; then
+              cd "$REPO_DIR/react-node-couchdb"
+            else
+              echo "ERROR: react-node-couchdb folder not found inside $REPO_DIR"
+              echo "Available folders:"
+              ls -l "$REPO_DIR"
+              exit 1
+            fi
+
+            echo "Confirming docker-compose.yml file exists..."
+            if [ ! -f "docker-compose.yml" ]; then
+              echo "ERROR: docker-compose.yml not found in $(pwd)"
+              exit 1
+            fi
 
             echo "Cleaning old Docker resources..."
             sudo docker system prune -af || true
